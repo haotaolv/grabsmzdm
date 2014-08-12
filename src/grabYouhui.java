@@ -3,6 +3,7 @@ import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 
 import java.io.*;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
@@ -17,16 +18,11 @@ public class grabYouhui {
 
     private HashMap<String, String> _titleWithUrls; //保存所有关键字相关优惠信息标题和链接
 
-    private String _keyword;             //关注的关键词
-    private String _s00;
-
     /*****************************
      * 构造函数
-     * @param keyword 抓取关键词
      *****************************/
-    public grabYouhui(String keyword) {
+    public grabYouhui() {
         _titleWithUrls = new HashMap<String, String>();
-        _keyword = keyword;
     }
 
     /*****************************
@@ -80,9 +76,11 @@ public class grabYouhui {
 
     /************************************
      * 获取什么值得买-优惠页面的标题
+     * @param keyword 关注的关键词
      * @return 是否存在与关键词相关的标题
      ***********************************/
-    public boolean getAllTitles() {
+    public boolean getAllTitles(String keyword) {
+        _titleWithUrls.clear();
         String lastTitle = readLastTitle();
 
         Document doc = null;
@@ -91,7 +89,7 @@ public class grabYouhui {
             pageNum++;
             try {
                 doc = Jsoup.connect("http://www.smzdm.com/youhui/p" + pageNum).userAgent(_useragent).timeout(20 * 1000).get();
-                System.out.println("正在抓取第" + pageNum + "页");
+                System.out.print(".");
             } catch (Exception e) {
                 e.printStackTrace();
             }
@@ -101,11 +99,11 @@ public class grabYouhui {
                 for (Element element : doc.select(_selectTitle)) {
                     //终止条件
                     if (element.text().equals(lastTitle)) {
-                        System.out.println("已达到上次抓取进度");
+                        System.out.println("\n已达到上次抓取进度");
                         return !_titleWithUrls.isEmpty();
                     }
 
-                    if (element.text().toLowerCase().contains(_keyword.toLowerCase())) {
+                    if (element.text().toLowerCase().contains(keyword.toLowerCase())) {
                         System.out.println("发现新优惠信息：" + element.text() + "\n" + element.attr("href"));
                         _titleWithUrls.put(element.text(), element.attr("href"));
                     }
@@ -136,58 +134,103 @@ public class grabYouhui {
 
     /*************************************
      * 将热点标题发送邮件
+     * @param keyword 关注的关键词
      *************************************/
-    public void mailToMe() {
+    public void mailToMe(String keyword) {
         //获取收件人密码
-        getPassword();
-        //发送邮件的主题
-        String title = "新的优惠信息！";
-        //发送邮件的内容
-        String content = "关于关键字 " + _keyword + " ，发现了新的优惠信息：\n";
-        content += "======================================\n";
-        Iterator iter = _titleWithUrls.entrySet().iterator();
-        while (iter.hasNext()) {
-            Map.Entry entry = (Map.Entry) iter.next();
-            content += (entry.getKey() + "\n");
-            content += (entry.getValue() + "\n");
-            content += "-----------------------------------\n";
-        }
-        content += "======================================\n";
+        String password = getPassword();
+        if (password != null) {
+            //发送邮件的主题
+            String title = "新的优惠信息！";
+            //发送邮件的内容
+            String content = "关于关键字 " + keyword + " ，发现了新的优惠信息：\n";
+            content += "======================================\n";
+            Iterator iter = _titleWithUrls.entrySet().iterator();
+            while (iter.hasNext()) {
+                Map.Entry entry = (Map.Entry) iter.next();
+                content += (entry.getKey() + "\n");
+                content += (entry.getValue() + "\n");
+                content += "-----------------------------------\n";
+            }
+            content += "======================================\n";
 
-        SendEMail.sendmail("mailme_mengqi@163.com", "smtp.163.com", _s00, "mengqipei@qq.com",
-                title, content, null, "", "utf-8");
+            SendEMail.sendmail("mailme_mengqi@163.com", "smtp.163.com", password, "mengqipei@qq.com",
+                    title, content, null, "", "utf-8");
+        } else {
+            return;
+        }
     }
 
     /************************************
      * 读取邮箱密码
      ************************************/
-    private void getPassword() {
+    private String getPassword() {
+        String password = "";
         File file = new File("00.data");
         FileReader fileReader = null;
         BufferedReader bufferedReader = null;
         try {
             fileReader = new FileReader(file);
             bufferedReader = new BufferedReader(fileReader);
-            _s00 = bufferedReader.readLine();
+            password = bufferedReader.readLine();
 
             bufferedReader.close();
             fileReader.close();
         } catch (FileNotFoundException e) {
             System.err.println("文件'00.data'未找到！");
-            return;
+            return null;
         } catch (IOException e) {
             System.err.println("读文件失败！");
-            return;
+            return null;
+        }
+        return password;
+    }
+
+    /***********************
+     * 获取关注的关键词列表
+     * @return 关键词列表
+     ***********************/
+    private ArrayList<String> getKeywords() {
+        ArrayList<String> keywords = new ArrayList<String>();
+
+        File file = new File("keywords.txt");
+        FileReader fileReader = null;
+        BufferedReader bufferedReader = null;
+        try {
+            fileReader = new FileReader(file);
+            bufferedReader = new BufferedReader(fileReader);
+            String str = "";
+            while ((str = bufferedReader.readLine()) != null) {
+                keywords.add(str.trim());
+            }
+            bufferedReader.close();
+            fileReader.close();
+        } catch (IOException e) {
+            System.err.println("读取文件失败！");
+            return null;
+        }
+        return keywords;
+    }
+
+    /******************************
+     * 执行批量关键词抓取
+     *****************************/
+    public void run() {
+        ArrayList<String> keywords = getKeywords();
+        if (keywords != null){
+            for (String keyword : keywords) {
+                if (getAllTitles(keyword)) {
+                    listAllTitles();
+                    mailToMe(keyword);
+                } else {
+                    System.out.println("关于关键词 " + keyword + " 未发现新的优惠信息！");
+                }
+            }
         }
     }
 
     public static void main(String[] args) {
-        grabYouhui gy = new grabYouhui("kindle");
-        if (gy.getAllTitles()) {
-            gy.listAllTitles();
-            gy.mailToMe();
-        } else {
-            System.out.println("未发现新的优惠信息！");
-        }
+        grabYouhui gy = new grabYouhui();
+        gy.run();
     }
 }
