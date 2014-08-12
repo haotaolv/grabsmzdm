@@ -1,11 +1,11 @@
 import org.jsoup.Jsoup;
-import org.jsoup.nodes.*;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
 
-import javax.mail.*;
 import java.io.*;
-import javax.mail.internet.InternetAddress;
-import javax.mail.internet.MimeMessage;
-import java.util.*;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
 
 /**
  * Created by Mengqi on 2014/8/12 0012.
@@ -20,12 +20,19 @@ public class grabYouhui {
     private String _keyword;             //关注的关键词
     private String _s00;
 
+    /*****************************
+     * 构造函数
+     * @param keyword 抓取关键词
+     *****************************/
     public grabYouhui(String keyword) {
         _titleWithUrls = new HashMap<String, String>();
-
         _keyword = keyword;
     }
 
+    /*****************************
+     * 读取最后一次抓取的标题以确定这次抓取的终点
+     * @return 最后一次抓取的标题
+     *****************************/
     private String readLastTitle() {
         File file = new File("lastTitle.txt");
         FileReader fileReader = null;
@@ -47,6 +54,11 @@ public class grabYouhui {
         return title;
     }
 
+    /***********************************
+     * 保存抓取的第一条标题作为下次抓取的终点
+     * @param title 要保存的标题
+     * @return 保存是否成功
+     **********************************/
     private boolean saveLastTitle(String title) {
         File file = new File("lastTitle.txt");
         FileWriter fileWriter = null;
@@ -60,22 +72,26 @@ public class grabYouhui {
             bufferedWriter.close();
             fileWriter.close();
         } catch (IOException e) {
-//            e.printStackTrace();
             System.err.println("保存文件失败！");
             return false;
         }
         return true;
     }
+
+    /************************************
+     * 获取什么值得买-优惠页面的标题
+     * @return 是否存在与关键词相关的标题
+     ***********************************/
     public boolean getAllTitles() {
         String lastTitle = readLastTitle();
 
         Document doc = null;
         int pageNum = 0;
-        while(true) {
+        while (true) {
             pageNum++;
             try {
                 doc = Jsoup.connect("http://www.smzdm.com/youhui/p" + pageNum).userAgent(_useragent).timeout(20 * 1000).get();
-                System.out.println("正在抓取第"+pageNum+"页");
+                System.out.println("正在抓取第" + pageNum + "页");
             } catch (Exception e) {
                 e.printStackTrace();
             }
@@ -102,6 +118,9 @@ public class grabYouhui {
         }
     }
 
+    /***********************************
+     * 打印所有热点标题
+     **********************************/
     public void listAllTitles() {
         System.out.println("======================================");
         System.out.println("您关注的优惠信息：");
@@ -115,68 +134,35 @@ public class grabYouhui {
         System.out.println("======================================");
     }
 
+    /*************************************
+     * 将热点标题发送邮件
+     *************************************/
     public void mailToMe() {
+        //获取收件人密码
         getPassword();
-        //创建JavaMail需要用到的属性类：
-        Properties props = new Properties();
-        //设置smtp服务器
-        props.put("mail.smtp.host", "smtp.163.com");
-        //设置验证为true
-        props.put("mail.smtp.auth", "true");
-
-        //创建验证器
-        Authenticator authenticator = new Authenticator() {
-            protected PasswordAuthentication getPasswordAuthentication() {
-                return new PasswordAuthentication("mailme_mengqi@163.com",_s00);
-            }
-        };
-
-        Session session = Session.getDefaultInstance(props, authenticator);
-        MimeMessage mimeMessage = new MimeMessage(session);
-
-        try {
-            mimeMessage.setFrom(new InternetAddress("mailme_mengqi@163.com"));               //设置发送者
-        } catch (MessagingException e) {
-            System.err.println("发送人设置失败");
-            return;
+        //发送邮件的主题
+        String title = "新的优惠信息！";
+        //发送邮件的内容
+        String content = "关于关键字 " + _keyword + " ，发现了新的优惠信息：\n";
+        content += "======================================\n";
+        Iterator iter = _titleWithUrls.entrySet().iterator();
+        while (iter.hasNext()) {
+            Map.Entry entry = (Map.Entry) iter.next();
+            content += (entry.getKey() + "\n");
+            content += (entry.getValue() + "\n");
+            content += "-----------------------------------\n";
         }
-        try {
-            mimeMessage.setRecipients(Message.RecipientType.TO, "mengqipei@qq.com");    //设置收件人邮箱
-        } catch (MessagingException e) {
-            System.err.println("设置收件人邮箱失败");
-            return;
-        }
+        content += "======================================\n";
 
-        try {
-            mimeMessage.setSubject("新的优惠信息！");      //设置标题
-            mimeMessage.setSentDate(new Date());           //设置发送时间
-            String content = "关于关键字 "+_keyword+" ，发现了新的优惠信息：\n";
-            content += "======================================\n";
-            Iterator iter = _titleWithUrls.entrySet().iterator();
-            while (iter.hasNext()) {
-                Map.Entry entry = (Map.Entry) iter.next();
-                content += (entry.getKey()+"\n");
-                content += (entry.getValue()+"\n");
-                content += "-----------------------------------\n";
-            }
-            content += "======================================\n";
-            mimeMessage.setText(content);
-            mimeMessage.saveChanges();
-        } catch (MessagingException e) {
-            System.err.println("邮件创建失败！");
-            return;
-        }
-        try {
-            Transport.send(mimeMessage);
-        } catch (MessagingException e) {
-            System.err.println("邮件发送失败！");
-            return;
-        }
-        System.out.println("邮件已发送！");
+        SendEMail.sendmail("mailme_mengqi@163.com", "smtp.163.com", _s00, "mengqipei@qq.com",
+                title, content, null, "", "utf-8");
     }
 
+    /************************************
+     * 读取邮箱密码
+     ************************************/
     private void getPassword() {
-        File file = new File("00.txt");
+        File file = new File("00.data");
         FileReader fileReader = null;
         BufferedReader bufferedReader = null;
         try {
@@ -187,23 +173,21 @@ public class grabYouhui {
             bufferedReader.close();
             fileReader.close();
         } catch (FileNotFoundException e) {
-            System.err.println("文件'00.txt'未找到！");
+            System.err.println("文件'00.data'未找到！");
             return;
         } catch (IOException e) {
             System.err.println("读文件失败！");
             return;
         }
-        return;
     }
 
     public static void main(String[] args) {
-        grabYouhui gy = new grabYouhui("AKG");
+        grabYouhui gy = new grabYouhui("kindle");
         if (gy.getAllTitles()) {
             gy.listAllTitles();
             gy.mailToMe();
         } else {
             System.out.println("未发现新的优惠信息！");
         }
-
     }
 }
