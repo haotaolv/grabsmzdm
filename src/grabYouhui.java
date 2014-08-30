@@ -94,7 +94,8 @@ public class grabYouhui {
                 e.printStackTrace();
             }
             //第一条优惠信息，保存作为下次抓取时循环的终止条件
-            saveLastTitle(doc.select(_selectTitle).first().text());
+            if(pageNum == 0)
+                saveLastTitle(doc.select(_selectTitle).first().text());
             if (doc != null) {
                 for (Element element : doc.select(_selectTitle)) {
                     //终止条件
